@@ -16,7 +16,15 @@ def get_client():
 def set_sales_tax(doc, method):
 	if not doc.items:
 		return
-
+	
+	if frappe.db.get_value("Customer", doc.customer, "exempt_from_sales_tax"):
+		for tax in doc.taxes:
+			if tax.description == "Sales Tax":
+				tax.tax_amount = 0
+				break
+		doc.run_method("calculate_taxes_and_totals")
+		return
+	
 	taxjar_settings = frappe.get_single("TaxJar Settings")
 
 	client = get_client()
