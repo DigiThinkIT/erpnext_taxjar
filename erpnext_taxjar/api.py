@@ -32,8 +32,11 @@ def set_sales_tax(doc, method):
 	if not tax_dict:
 		return
 
-	taxdata = client.tax_for_order(tax_dict)
-
+	try:
+		taxdata = client.tax_for_order(tax_dict)
+	except:
+		return
+	
 	if "Sales Tax" in [tax.description for tax in doc.taxes]:
 		for tax in doc.taxes:
 			if tax.description == "Sales Tax":
