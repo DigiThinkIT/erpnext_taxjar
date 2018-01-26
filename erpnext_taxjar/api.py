@@ -87,9 +87,14 @@ def get_tax_data(doc):
 		if tax.account_head == "Freight and Forwarding Charges - JA":
 			shipping = tax.tax_amount
 
-	shipping_state = validate_state(shipping_address)
-	country_code = frappe.db.get_value("Country", shipping_address.country, "code")
+	country_code = frappe.db.get_value(
+		"Country", shipping_address.country, "code")
 	country_code = country_code.upper()
+
+	if country_code != "US":
+		return
+
+	shipping_state = validate_state(shipping_address)
 
 	tax_dict = {
 		'to_country': country_code,
@@ -141,6 +146,9 @@ def set_sales_tax(doc, method):
 
 	tax_account_head = frappe.db.get_single_value("TaxJar Settings", "tax_account_head")
 	tax_dict = get_tax_data(doc)
+
+	if not tax_dict:
+		return
 
 	tax_data = validate_tax_request(tax_dict)
 	if not tax_data.amount_to_collect:
