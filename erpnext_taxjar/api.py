@@ -87,14 +87,20 @@ def get_tax_data(doc):
 		if tax.account_head == "Freight and Forwarding Charges - JA":
 			shipping = tax.tax_amount
 
-	country_code = frappe.db.get_value(
-		"Country", shipping_address.country, "code")
+	country_code = frappe.db.get_value("Country", shipping_address.country, "code")
 	country_code = country_code.upper()
 
 	if country_code != "US":
 		return
 
-	shipping_state = validate_state(shipping_address)
+	shipping_state = shipping_address.get("state")
+
+	if shipping_state is not None:
+		# Handle shipments to military addresses
+		if shipping_state.upper() in ("AE", "AA", "AP"):
+			shipping_state = shipping_state.upper()
+		else:
+			shipping_state = validate_state(shipping_address)
 
 	tax_dict = {
 		'to_country': country_code,
@@ -202,13 +208,7 @@ def validate_tax_request(tax_dict):
 
 
 def validate_state(address):
-	if not (address and address.get("state")):
-		return
-
 	country_code = frappe.db.get_value("Country", address.get("country"), "code")
-
-	if country_code != "us":
-		return
 
 	error_message = _("""{} is not a valid state! Check for typos or enter the ISO code for your state.""".format(address.get("state")))
 	state = address.get("state").upper().strip()
