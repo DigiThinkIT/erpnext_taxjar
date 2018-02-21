@@ -103,7 +103,8 @@ def get_tax_data(doc):
 	if shipping_state is not None:
 		# Handle shipments to military addresses
 		if shipping_state.upper() in ("AE", "AA", "AP"):
-			frappe.throw(_("For shipping to overseas US bases, please contact us with details at shipping@jhaudio.com."))
+			frappe.throw(_("""For shipping to overseas US bases, please
+							contact us with your order details."""))
 		else:
 			shipping_state = validate_state(shipping_address)
 
@@ -124,10 +125,10 @@ def sanitize_error_response(response):
 	response = response.replace("_", " ")
 
 	sanitized_responses = {
-		"to_zip": "Zipcode",
-		"to_city": "City",
-		"to_state": "State",
-		"to_country": "Country"
+		"to zip": "Zipcode",
+		"to city": "City",
+		"to state": "State",
+		"to country": "Country"
 	}
 
 	for k, v in sanitized_responses.items():
