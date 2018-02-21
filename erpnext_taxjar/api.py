@@ -175,7 +175,7 @@ def set_sales_tax(doc, method):
 			# Loop through tax rows for existing Sales Tax entry
 			# If none are found, add a row with the tax amount
 			for tax in doc.taxes:
-				if tax.account_head == tax_account_head:
+				if tax.account_head == TAX_ACCOUNT_HEAD:
 					tax.tax_amount = tax_data.amount_to_collect
 
 					doc.run_method("calculate_taxes_and_totals")
@@ -184,7 +184,7 @@ def set_sales_tax(doc, method):
 				doc.append("taxes", {
 					"charge_type": "Actual",
 					"description": "Sales Tax",
-					"account_head": tax_account_head,
+					"account_head": TAX_ACCOUNT_HEAD,
 					"tax_amount": tax_data.amount_to_collect
 				})
 
