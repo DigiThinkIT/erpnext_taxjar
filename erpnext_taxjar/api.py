@@ -9,6 +9,7 @@ from frappe import _
 from frappe.contacts.doctype.address.address import get_company_address
 
 TAX_ACCOUNT_HEAD = frappe.db.get_single_value("TaxJar Settings", "tax_account_head")
+SHIP_ACCOUNT_HEAD = frappe.db.get_single_value("TaxJar Settings", "shipping_account_head")
 
 
 def create_transaction(doc, method):
@@ -94,7 +95,7 @@ def get_tax_data(doc):
 	shipping = 0
 
 	for tax in doc.taxes:
-		if tax.account_head == "Freight and Forwarding Charges - JA":
+		if tax.account_head == SHIP_ACCOUNT_HEAD:
 			shipping += tax.tax_amount
 
 	shipping_state = shipping_address.get("state")
