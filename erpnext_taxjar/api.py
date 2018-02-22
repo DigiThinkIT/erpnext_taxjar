@@ -8,6 +8,9 @@ from erpnext import get_default_company
 from frappe import _
 from frappe.contacts.doctype.address.address import get_company_address
 
+TAX_ACCOUNT_HEAD = frappe.db.get_single_value("TaxJar Settings", "tax_account_head")
+SHIP_ACCOUNT_HEAD = frappe.db.get_single_value("TaxJar Settings", "shipping_account_head")
+
 
 def create_transaction(doc, method):
 	# Allow skipping creation of transaction for dev environment
@@ -19,7 +22,7 @@ def create_transaction(doc, method):
 	sales_tax = 0
 
 	for tax in doc.taxes:
-		if tax.account_head == "Sales Tax - JA":
+		if tax.account_head == TAX_ACCOUNT_HEAD:
 			sales_tax = tax.tax_amount
 
 	if not sales_tax:
@@ -51,9 +54,13 @@ def delete_transaction(doc, method):
 
 
 def get_client():
-	api_key = frappe.get_doc("TaxJar Settings", "TaxJar Settings").get_password("api_key")
-	client = taxjar.Client(api_key=api_key)
-	return client
+	taxjar_settings = frappe.get_single("TaxJar Settings")
+
+	if not taxjar_settings.api_key:
+		frappe.throw(_("The TaxJar API key is missing."), frappe.AuthenticationError)
+
+	api_key = taxjar_settings.get_password("api_key")
+	return taxjar.Client(api_key=api_key)
 
 
 def get_shipping_address(doc):
@@ -76,29 +83,28 @@ def get_tax_data(doc):
 	if not shipping_address:
 		return
 
-	taxjar_settings = frappe.get_single("TaxJar Settings")
+	if shipping_address.country:
+		country_code = frappe.db.get_value("Country", shipping_address.country, "code")
+		country_code = country_code.upper()
+	else:
+		frappe.throw(_("Please select a country!"))
 
-	if not (taxjar_settings.api_key or taxjar_settings.tax_account_head):
+	if country_code != "US":
 		return
 
 	shipping = 0
 
 	for tax in doc.taxes:
-		if tax.account_head == "Freight and Forwarding Charges - JA":
-			shipping = tax.tax_amount
-
-	country_code = frappe.db.get_value("Country", shipping_address.country, "code")
-	country_code = country_code.upper()
-
-	if country_code != "US":
-		return
+		if tax.account_head == SHIP_ACCOUNT_HEAD:
+			shipping += tax.tax_amount
 
 	shipping_state = shipping_address.get("state")
 
 	if shipping_state is not None:
 		# Handle shipments to military addresses
 		if shipping_state.upper() in ("AE", "AA", "AP"):
-			shipping_state = shipping_state.upper()
+			frappe.throw(_("""For shipping to overseas US bases, please
+							contact us with your order details."""))
 		else:
 			shipping_state = validate_state(shipping_address)
 
@@ -116,13 +122,13 @@ def get_tax_data(doc):
 
 def sanitize_error_response(response):
 	response = response.full_response.get("detail")
+	response = response.replace("_", " ")
 
 	sanitized_responses = {
-		"to_zip": "Zipcode",
-		"to_city": "City",
-		"to_state": "State",
-		"to_country": "Country",
-		"sales_tax": "Sales Tax"
+		"to zip": "Zipcode",
+		"to city": "City",
+		"to state": "State",
+		"to country": "Country"
 	}
 
 	for k, v in sanitized_responses.items():
@@ -143,46 +149,45 @@ def set_sales_tax(doc, method):
 
 	if frappe.db.get_value("Customer", doc.customer, "exempt_from_sales_tax"):
 		for tax in doc.taxes:
-			if tax.description == "Sales Tax":
+			if tax.account_head == TAX_ACCOUNT_HEAD:
 				tax.tax_amount = 0
 				break
 
 		doc.run_method("calculate_taxes_and_totals")
 		return
 
-	tax_account_head = frappe.db.get_single_value("TaxJar Settings", "tax_account_head")
 	tax_dict = get_tax_data(doc)
 
 	if not tax_dict:
 		return
 
 	tax_data = validate_tax_request(tax_dict)
-	if not tax_data.amount_to_collect:
-		taxes_list = []
 
-		for tax in doc.taxes:
-			if tax.account_head != tax_account_head:
-				taxes_list.append(tax)
+	if tax_data is not None:
+		if not tax_data.amount_to_collect:
+			taxes_list = []
 
-		setattr(doc, "taxes", taxes_list)
-		return
+			for tax in doc.taxes:
+				if tax.account_head != TAX_ACCOUNT_HEAD:
+					taxes_list.append(tax)
 
-	if tax_data is not None and tax_data.amount_to_collect > 0:
-		# Loop through tax rows for existing Sales Tax entry
-		# If none are found, add a row with the tax amount
-		for tax in doc.taxes:
-			if tax.account_head == tax_account_head:
-				tax.tax_amount = tax_data.amount_to_collect
+			setattr(doc, "taxes", taxes_list)
+		elif tax_data.amount_to_collect > 0:
+			# Loop through tax rows for existing Sales Tax entry
+			# If none are found, add a row with the tax amount
+			for tax in doc.taxes:
+				if tax.account_head == TAX_ACCOUNT_HEAD:
+					tax.tax_amount = tax_data.amount_to_collect
 
-				doc.run_method("calculate_taxes_and_totals")
-				break
-		else:
-			doc.append("taxes", {
-				"charge_type": "Actual",
-				"description": "Sales Tax",
-				"account_head": tax_account_head,
-				"tax_amount": tax_data.amount_to_collect
-			})
+					doc.run_method("calculate_taxes_and_totals")
+					break
+			else:
+				doc.append("taxes", {
+					"charge_type": "Actual",
+					"description": "Sales Tax",
+					"account_head": TAX_ACCOUNT_HEAD,
+					"tax_amount": tax_data.amount_to_collect
+				})
 
 			doc.run_method("calculate_taxes_and_totals")
 
