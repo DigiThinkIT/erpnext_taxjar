@@ -170,7 +170,7 @@ def set_sales_tax(doc, method):
 		return
 
 	customer_exempt = frappe.db.get_value("Customer", doc.customer, "exempt_from_sales_tax")
-	customer_exempt if customer_exempt else None
+	customer_exempt = customer_exempt if customer_exempt else 0
 	if doc.get("exempt_from_sales_tax") == 1 or customer_exempt:
 		for tax in doc.taxes:
 			if tax.account_head == TAX_ACCOUNT_HEAD:
