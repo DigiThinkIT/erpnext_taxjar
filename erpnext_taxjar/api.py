@@ -126,7 +126,6 @@ def get_tax_data(doc):
 			customer_state = validate_state(customer_address)
 
 	line_items = get_item_tax_code(doc.items)
-	print(line_items)
 	tax_dict = {
 		'to_country': to_country_code,
 		'to_zip': customer_address.pincode,
@@ -139,8 +138,6 @@ def get_tax_data(doc):
 		'shipping': shipping,
 		'amount': doc.net_total,
 		'line_items': line_items}
-
-	print(tax_dict)
 	return tax_dict
 
 
@@ -169,7 +166,6 @@ def set_sales_tax(doc, method):
 	# if taxjar_calculate_tax isn't defined in site_config we assume
 	# we DO want to calculate tax all the time.
 	if not frappe.local.conf.get("taxjar_calculate_tax", 1):
-		print("taxjar not enable in site_config")
 		return
 
 	if doc.get("exempt_from_sales_tax") == 1:
@@ -231,7 +227,6 @@ def validate_tax_request(tax_dict):
 
 	try:
 		tax_data = client.tax_for_order(tax_dict)
-		print(tax_data)
 	except taxjar.exceptions.TaxJarResponseError as err:
 		frappe.throw(_(sanitize_error_response(err)))
 	else:
@@ -270,8 +265,6 @@ def get_item_tax_code(items):
 		return
 	for item in items:
 		item_tax_category = frappe.db.get_value("Item", item.item_code, "item_tax_category")
-		print("item tax category", item_tax_category)
-		print(get_product_code(item_tax_category))
 		if not item_tax_category:
 			continue
 		item_code_list.append({
