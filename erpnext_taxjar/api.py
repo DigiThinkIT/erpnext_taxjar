@@ -138,6 +138,7 @@ def get_tax_data(doc):
 		'shipping': shipping,
 		'amount': doc.net_total,
 		'line_items': line_items}
+
 	return tax_dict
 
 
@@ -168,7 +169,9 @@ def set_sales_tax(doc, method):
 	if not frappe.local.conf.get("taxjar_calculate_tax", 1):
 		return
 
-	if doc.get("exempt_from_sales_tax") == 1:
+	customer_exempt = frappe.db.get_value("Customer", doc.customer, "exempt_from_sales_tax")
+	customer_exempt if customer_exempt else None
+	if doc.get("exempt_from_sales_tax") == 1 or customer_exempt:
 		for tax in doc.taxes:
 			if tax.account_head == TAX_ACCOUNT_HEAD:
 				tax.tax_amount = 0
