@@ -187,6 +187,8 @@ def set_sales_tax(doc, method):
 
 	tax_data = validate_tax_request(tax_dict)
 
+	cost_center = frappe.db.get_value("Company", doc.company, "cost_center")
+
 	if tax_data is not None:
 		if not tax_data.amount_to_collect:
 			taxes_list = []
@@ -210,6 +212,7 @@ def set_sales_tax(doc, method):
 					"charge_type": "Actual",
 					"description": "Sales Tax",
 					"account_head": TAX_ACCOUNT_HEAD,
+					"cost_center": cost_center,
 					"tax_amount": tax_data.amount_to_collect
 				})
 
