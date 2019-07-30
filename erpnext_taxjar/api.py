@@ -159,19 +159,15 @@ def set_sales_tax(doc, method):
 	tax_dict = get_tax_data(doc)
 
 	if not tax_dict:
+		# Remove existing tax rows if address is changed from a taxable state/country
+		setattr(doc, "taxes", [tax for tax in doc.taxes if tax.account_head != TAX_ACCOUNT_HEAD])
 		return
 
 	tax_data = validate_tax_request(tax_dict)
 
 	if tax_data is not None:
 		if not tax_data.amount_to_collect:
-			taxes_list = []
-
-			for tax in doc.taxes:
-				if tax.account_head != TAX_ACCOUNT_HEAD:
-					taxes_list.append(tax)
-
-			setattr(doc, "taxes", taxes_list)
+			setattr(doc, "taxes", [tax for tax in doc.taxes if tax.account_head != TAX_ACCOUNT_HEAD])
 		elif tax_data.amount_to_collect > 0:
 			# Loop through tax rows for existing Sales Tax entry
 			# If none are found, add a row with the tax amount
