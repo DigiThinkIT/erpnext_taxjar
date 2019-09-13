@@ -34,7 +34,8 @@ def create_transaction(doc, method):
 		return
 
 	tax_dict['transaction_id'] = doc.name
-	tax_dict['transaction_date'] = frappe.utils.today()
+	tax_dict['transaction_date'] = doc.posting_date if doc.posting_date else frappe.utils.today()
+	# frappe.utils.today() won't calculate correctly in back dated transactions, used as fallback
 	tax_dict['sales_tax'] = sales_tax
 	tax_dict['amount'] = doc.total + tax_dict['shipping']
 
@@ -64,7 +65,10 @@ def get_client():
 
 
 def get_shipping_address(doc):
-	company_address = get_company_address(get_default_company()).company_address
+	company = get_default_company() if not doc.company else doc.company
+	company_address = get_company_address(company).company_address
+	if not company_address:
+		frappe.throw(_("Please set up your company's shipping address"), frappe.AuthenticationError)
 	company_address = frappe.get_doc("Address", company_address)
 	shipping_address = None
 
@@ -78,19 +82,25 @@ def get_shipping_address(doc):
 
 
 def get_tax_data(doc):
+	if not doc.customer_address:
+		return
+	customer_address = frappe.get_doc("Address", doc.customer_address)
+
 	shipping_address = get_shipping_address(doc)
 
-	if not shipping_address:
-		return
-
 	if shipping_address.country:
-		country_code = frappe.db.get_value("Country", shipping_address.country, "code")
-		country_code = country_code.upper()
+		from_country_code = frappe.db.get_value("Country", shipping_address.country, "code")
+		from_country_code = from_country_code.upper()
+		if from_country_code != "US":
+			return
 	else:
-		frappe.throw(_("Please select a country!"))
+		frappe.throw(_("Country is required"))
 
-	if country_code != "US":
-		return
+	if customer_address.country:
+		to_country_code = frappe.db.get_value("Country", customer_address.country, "code")
+		to_country_code = to_country_code.upper()
+	else:
+		frappe.throw(_("Country is required"))
 
 	shipping = 0
 
@@ -101,21 +111,33 @@ def get_tax_data(doc):
 	shipping_state = shipping_address.get("state")
 
 	if shipping_state is not None:
+			shipping_state = validate_state(shipping_address)
+
+	shipping_state = shipping_address.get("state")
+
+	customer_state = customer_address.get("state")
+
+	if customer_state is not None:
 		# Handle shipments to military addresses
-		if shipping_state.upper() in ("AE", "AA", "AP"):
+		if customer_state.upper() in ("AE", "AA", "AP"):
 			frappe.throw(_("""For shipping to overseas US bases, please
 							contact us with your order details."""))
 		else:
-			shipping_state = validate_state(shipping_address)
+			customer_state = validate_state(customer_address)
 
+	line_items = get_item_tax_code(doc.items)
 	tax_dict = {
-		'to_country': country_code,
-		'to_zip': shipping_address.pincode,
-		'to_city': shipping_address.city,
-		'to_state': shipping_state,
+		'to_country': to_country_code,
+		'to_zip': customer_address.pincode,
+		'to_city': customer_address.city,
+		'to_state': customer_state,
+		'from_country': from_country_code,
+		'from_zip': shipping_address.pincode,
+		'from_city': shipping_address.city,
+		'from_state': shipping_state,
 		'shipping': shipping,
-		'amount': doc.net_total
-	}
+		'amount': doc.net_total,
+		'line_items': line_items}
 
 	return tax_dict
 
@@ -147,7 +169,9 @@ def set_sales_tax(doc, method):
 	if not frappe.local.conf.get("taxjar_calculate_tax", 1):
 		return
 
-	if doc.exempt_from_sales_tax or frappe.db.get_value("Customer", doc.customer, "exempt_from_sales_tax"):
+	customer_exempt = frappe.db.get_value("Customer", doc.customer, "exempt_from_sales_tax")
+	customer_exempt = customer_exempt if customer_exempt else 0
+	if doc.get("exempt_from_sales_tax") == 1 or customer_exempt:
 		for tax in doc.taxes:
 			if tax.account_head == TAX_ACCOUNT_HEAD:
 				tax.tax_amount = 0
@@ -164,6 +188,8 @@ def set_sales_tax(doc, method):
 		return
 
 	tax_data = validate_tax_request(tax_dict)
+
+	cost_center = frappe.db.get_value("Company", doc.company, "cost_center")
 
 	if tax_data is not None:
 		if not tax_data.amount_to_collect:
@@ -182,6 +208,7 @@ def set_sales_tax(doc, method):
 					"charge_type": "Actual",
 					"description": "Sales Tax",
 					"account_head": TAX_ACCOUNT_HEAD,
+					"cost_center": cost_center,
 					"tax_amount": tax_data.amount_to_collect
 				})
 
@@ -232,3 +259,52 @@ def validate_state(address):
 			frappe.throw(error_message)
 		else:
 			return lookup_state.code.split('-')[1]
+
+
+def get_item_tax_code(items):
+	item_code_list = []
+	if not items:
+		return
+	for item in items:
+		item_tax_category = frappe.db.get_value("Item", item.item_code, "item_tax_category")
+		if not item_tax_category:
+			continue
+		item_code_list.append({
+			"quantity": item.qty,
+			"unit_price": item.rate,
+			"product_tax_code": get_product_code(item_tax_category)
+		})
+	return item_code_list
+
+
+def get_product_code(category):
+	product_codes = {'Magazines & Subscriptions': '81300',
+		'Clothing - Swimwear': '20041',
+		'General Services': '19000',
+		'Other Exempt': '99999',
+		'Software as a Service': '30070',
+		'Soft Drinks': '40050',
+		'Digital Goods': '31000',
+		'Religious Books': '81120',
+		'Prepared Foods': '41000',
+		'Installation Services': '10040',
+		'Dry Cleaning Services': '19006',
+		'Books': '81100',
+		'Prescription': '51020',
+		'Textbooks': '81110',
+		'Candy': '40010',
+		'Magazine': '81310',
+		'Supplements': '40020',
+		'Printing Services': '19009',
+		'Admission Services': '19003',
+		'Hairdressing Services': '19008',
+		'Clothing': '20010',
+		'Food & Groceries': '40030',
+		'Parking Services': '19002',
+		'Advertising Services': '19001',
+		'Training Services': '19004',
+		'Non-Prescription': '51010',
+		'Professional Services': '19005',
+		'Bottled Water': '40060',
+		'Repair Services': '19007'}
+	return product_codes.get(category)

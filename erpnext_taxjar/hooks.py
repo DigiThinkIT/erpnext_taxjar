@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 from . import __version__ as app_version
 
 app_name = "erpnext_taxjar"
-app_title = "Erpnext Taxjar"
+app_title = "ERPNext TaxJar"
 app_publisher = "DigiThinkIT Inc"
 app_description = "TaxJar Integration with ERPNext"
 app_icon = "octicon octicon-file-directory"
@@ -129,4 +129,3 @@ awc_address_validation = [
 # override_whitelisted_methods = {
 # 	"frappe.desk.doctype.event.event.get_events": "erpnext_taxjar.event.get_events"
 # }
-
