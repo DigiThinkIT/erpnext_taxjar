@@ -4,9 +4,7 @@ import pycountry
 import taxjar
 
 import frappe
-from erpnext import get_default_company
 from frappe import _
-from frappe.contacts.doctype.address.address import get_company_address
 
 TAX_ACCOUNT_HEAD = frappe.db.get_single_value("TaxJar Settings", "tax_account_head")
 SHIP_ACCOUNT_HEAD = frappe.db.get_single_value("TaxJar Settings", "shipping_account_head")
@@ -64,15 +62,11 @@ def get_client():
 
 
 def get_shipping_address(doc):
-	company_address = get_company_address(get_default_company()).company_address
-	company_address = frappe.get_doc("Address", company_address)
-	shipping_address = None
-
-	if company_address:
-		if doc.shipping_address_name:
-			shipping_address = frappe.get_doc("Address", doc.shipping_address_name)
-		else:
-			shipping_address = company_address
+	if doc.shipping_address_name:
+		shipping_address = frappe.get_doc("Address", doc.shipping_address_name)
+	else:
+		default_shipping_address = frappe.db.get_single_value("TaxJar Settings", "default_shipping_address")
+		shipping_address = frappe.get_doc("Address", default_shipping_address)
 
 	return shipping_address
 
